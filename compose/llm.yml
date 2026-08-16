@@ -1,0 +1,99 @@
+version: '3.8'
+
+networks:
+  ai-net:
+    external: true
+
+volumes:
+  caddy_data:
+  postgres_data:
+  ollama_data:
+
+services:
+  caddy:
+    image: caddy:2.8-alpine
+    container_name: caddy
+    restart: unless-stopped
+    networks: [ai-net]
+    ports:
+      - "443:443"
+    volumes:
+      - ../config/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+
+  litellm:
+    image: ghcr.io/berriai/litellm:main-stable
+    container_name: litellm
+    restart: unless-stopped
+    networks: [ai-net]
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
+      DATABASE_URL: postgresql://spark:spark@postgres:5432/litellm
+    volumes:
+      - ../config/litellm/config.yaml:/app/config.yaml:ro
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    depends_on:
+      - postgres
+    ports:
+      - "127.0.0.1:4000:4000"
+
+  vllm:
+    image: vllm/vllm-openai:cu130-nightly
+    container_name: vllm
+    restart: unless-stopped
+    networks: [ai-net]
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      - /data/models:/models:ro
+    # RESTRICTED to 0.72 to prevent Unified Memory OOM. Serves ONLY 'expert'.
+    command: >
+      --model /data/models/nvidia-nemotron-3-super-120b-a12b-nvfp4
+      --served-model-name expert
+      --quantization nvfp4
+      --max-model-len 32768
+      --gpu-memory-utilization 0.72
+      --max-num-seqs 4
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 180s
+
+  # Block 2 Service (Will be started on Day 2)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    networks: [ai-net]
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "127.0.0.1:11434:11434"
+
+  postgres:
+    image: postgres:17-alpine
+    container_name: postgres
+    restart: unless-stopped
+    networks: [ai-net]
+    environment:
+      POSTGRES_USER: spark
+      POSTGRES_PASSWORD: spark
+      POSTGRES_DB: spark
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
