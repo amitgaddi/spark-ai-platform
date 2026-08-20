@@ -16,7 +16,7 @@ services:
     restart: unless-stopped
     networks: [ai-net]
     ports:
-      - "443:443"
+      - "80:80"
     volumes:
       - ../config/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
@@ -54,7 +54,7 @@ services:
       - /data/models:/models:ro
     # RESTRICTED to 0.72 to prevent Unified Memory OOM. Serves ONLY 'expert'.
     command: >
-      --model /data/models/nvidia-nemotron-3-super-120b-a12b-nvfp4
+      --model /models/nvidia-nemotron-3-super-120b-a12b-nvfp4
       --served-model-name expert
       --quantization nvfp4
       --max-model-len 32768
