@@ -1,0 +1,14 @@
+models:
+  expert:
+    cmd: >
+      docker run --rm --gpus all --network ai-net --name vllm-expert 
+      -v /data/models:/models:ro -p 8000:8000 
+      vllm/vllm-openai:cu130-nightly 
+      --model /models/nvidia-nemotron-3-super-120b-a12b-nvfp4 
+      --served-model-name expert --quantization nvfp4 
+      --max-model-len 32768 --gpu-memory-utilization 0.72 --max-num-seqs 4
+    ttl: 300  # Unload after 5 minutes of no use
+
+  coder:
+    proxy: "http://ollama:11434"  # Route to the always-running Ollama
+    ttl: 300

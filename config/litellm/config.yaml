@@ -1,23 +1,19 @@
 model_list:
-  # Primary model - served by vLLM
   - model_name: expert
     litellm_params:
       model: openai/expert
       api_base: http://vllm:8000/v1
       api_key: os.environ/LITELLM_MASTER_KEY
-    model_info:
-      max_tokens: 32768
-      mode: chat
 
-  # Fast/Coder models - served by Ollama (Block 2)
+  - model_name: coder
+    litellm_params:
+      model: ollama/qwen3-coder:30b
+      api_base: http://ollama:11434
+
   - model_name: fast
     litellm_params:
       model: ollama/qwen3:8b
       api_base: http://ollama:11434
-#  - model_name: coder
-#    litellm_params:
-#      model: ollama/qwen3-coder:30b
-#      api_base: http://ollama:11434
 
 router_settings:
   routing_strategy: usage-based-routing-v2

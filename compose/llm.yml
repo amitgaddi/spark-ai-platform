@@ -1,5 +1,3 @@
-version: '3.8'
-
 networks:
   ai-net:
     external: true
@@ -52,7 +50,6 @@ services:
               capabilities: [gpu]
     volumes:
       - /data/models:/models:ro
-    # RESTRICTED to 0.72 to prevent Unified Memory OOM. Serves ONLY 'expert'.
     command: >
       --model /models/nvidia-nemotron-3-super-120b-a12b-nvfp4
       --served-model-name expert
@@ -60,14 +57,7 @@ services:
       --max-model-len 32768
       --gpu-memory-utilization 0.72
       --max-num-seqs 4
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 180s
 
-  # Block 2 Service (Will be started on Day 2)
   ollama:
     image: ollama/ollama:latest
     container_name: ollama
