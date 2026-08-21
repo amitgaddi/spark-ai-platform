@@ -1,6 +1,6 @@
 #!/bin/bash
 echo "Unloading 30B Coder Model from Ollama..."
-docker exec -it ollama ollama stop qwen3-coder:30b
+docker exec ollama ollama stop qwen3-coder:30b
 
 echo "Loading 120B Expert Model..."
 docker start vllm

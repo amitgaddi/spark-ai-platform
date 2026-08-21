@@ -1,0 +1,17 @@
+services:
+  agent:
+    build:
+      context: ../agents
+      dockerfile: Dockerfile
+    container_name: agent
+    restart: unless-stopped
+    networks: [ai-net]
+    environment:
+      LITELLM_API_BASE: http://litellm:4000/v1
+      LITELLM_API_KEY: ${LITELLM_MASTER_KEY}
+      MODEL_EXPERT: expert
+      MODEL_FAST: fast
+
+networks:
+  ai-net:
+    external: true
