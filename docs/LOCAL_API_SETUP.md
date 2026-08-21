@@ -1,66 +1,74 @@
-# Spark AI Platform - Developer & Coding Assistant Setup
 
-This guide explains how to connect custom applications and coding assistants (like Claude Code, Cursor, or Aider) to your personal 24/7 Spark AI server.
+```markdown
+# Spark AI Platform - Application Integration Guide
 
-## Architecture Overview
+This document provides the specification for connecting custom Python applications (built locally on your Mac) to the Spark AI Local LLM Server. 
 
-The system has two distinct API paths:
-1. **Agent API (`/agent-api/v1/chat`)**: For chat interfaces (like Telegram). Includes the Smart Prompt Enhancer (Re-Prompter) and the Actor-Critic verification loop.
-2. **LiteLLM Direct API (`/v1/chat/completions`)**: Standard OpenAI-compatible endpoint for coding assistants. Bypasses the Re-Prompter and verification loop entirely (the coding assistant handles its own reasoning/verification).
+**Architecture:**
+Your Mac App -> (HTTP over Tailscale VPN) -> Spark AI LiteLLM Gateway -> vLLM (120B Model)
 
----
+## 1. Configuration & Authentication
 
-## 1. Connecting Coding Assistants (Cursor, Aider, Claude Code)
+Applications must never hardcode the API key. They should read it from the environment.
 
-Coding assistants must use the **Direct LiteLLM API** to avoid interfering with the Spark's internal agent loops. 
+- **API Base URL:** `http://spark-8441/v1` (or `http://100.121.31.59/v1`)
+- **API Key Environment Variable:** `SPARK_API_KEY`
+- **Expected Header:** `Authorization: Bearer <SPARK_API_KEY>`
 
-**Base URL:** `http://spark-8441/v1` (or your Tailscale IP `http://100.121.31.59/v1`)
-**API Key:** Your `LITELLM_MASTER_KEY` from the `.env` file.
-
-### Example: Cursor / Continue.dev Configuration
-In your extension settings, configure the OpenAI provider:
-```json
-{
-  "provider": "openai",
-  "apiKey": "<LITELLM_MASTER_KEY>",
-  "baseURL": "http://spark-8441/v1",
-  "model": "expert"
-}
-```
-
-### Available Models for Coding
-- `expert`: Nemotron-3-Super-120B (Great for architecture, reasoning, and general code generation).
-- `coder`: Qwen3-Coder-30B (Specialized for coding).
-- `fast`: Qwen3-8B (Autocomplete and quick chat).
-
-### Switching to the 30B Coder Model
-Because the DGX Spark has 128GB of shared memory, the 120B and 30B models cannot run simultaneously. 
-
-To use the `coder` model, SSH into the Spark and run the swap script:
+Ensure your Mac's `~/.zshrc` exports this variable:
 ```bash
-cd ~/spark-ai-platform
-./scripts/swap-to-coder.sh
-```
-*(This stops vLLM (120B) and frees 92GB of RAM so Ollama can load the 30B Coder).*
-
-When you are done coding, swap back to the expert model:
-```bash
-./scripts/swap-to-expert.sh
+export SPARK_API_KEY="your_generated_key_here"
 ```
 
-### Important: Timeouts
-The 120B model is highly capable but slower than hosted models. Ensure your coding assistant has a timeout of at least **120-300 seconds** to prevent request cancellations during long code generation.
+## 2. Available Models
 
----
+- `expert`: Nemotron-3-Super-120B (Use for complex reasoning, drafting, architecture, and chat).
+- `fast`: Qwen3-8B (Use for quick classifications, routing, or simple tasks).
+- `coder`: Qwen3-Coder-30B (Use for code generation. *Requires manual swap on Spark first*).
 
-## 2. Connecting Custom Apps (Agent API)
+## 3. Integration Example (Python)
 
-If you are building a custom app that needs grounded research and verification, use the **Agent API**.
+Use the standard `openai` Python SDK to connect to the Spark. 
 
-**Base URL:** `http://spark-8441/agent-api/v1`
+**Install dependency:** `pip install openai`
 
-### Workflow:
-1. `POST /chat` with `{"message": "Your query !q2"}`.
-2. If `status` is `needs_approval`, present the `suggested_prompt` to the user.
-3. `POST /approve` with `{"task_id": "...", "approved_prompt": "..."}`.
-4. The background worker will process the task (Search -> Fetch -> Critic -> Verify) and save the result to Redis.
+**Code Template:**
+```python
+import os
+from openai import OpenAI
+
+# Initialize the client pointing to the local Spark AI server
+client = OpenAI(
+    base_url="http://spark-8441/v1",
+    api_key=os.environ.get("SPARK_API_KEY") # Fetch key from environment
+)
+
+def call_spark_llm(prompt: str, model: str = "expert", max_tokens: int = 4000) -> str:
+    """
+    Sends a prompt to the Spark AI local server and returns the response.
+    """
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=max_tokens,
+            temperature=0.1
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"Error communicating with Spark AI: {e}"
+
+# Example usage:
+if __name__ == "__main__":
+    result = call_spark_llm("Write a python function to reverse a string.")
+    print(result)
+```
+
+## 4. Important Constraints for AI Agents
+
+When building applications that use this API, AI coding assistants must adhere to the following constraints:
+
+1. **Context Window Limit:** The `expert` model has a maximum context window of **65,536 tokens**. If passing large documents (like resumes or web pages) into the prompt, chunk the data or summarize it first to avoid `400 Context Window Exceeded` errors.
+2. **Timeouts:** The 120B model is highly capable but slower than hosted APIs. The client must have a timeout of at least **120-300 seconds** to prevent request cancellations during long generations.
+3. **Tool Calling Format:** The server natively supports OpenAI-style tool calls (JSON), but it is recommended to use standard `chat.completions` for simple application integrations.
+```

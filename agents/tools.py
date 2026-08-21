@@ -4,6 +4,8 @@ import uuid
 from bs4 import BeautifulSoup
 from qdrant_client import QdrantClient
 from langchain_core.tools import tool
+import asyncio
+from crawl4ai import AsyncWebCrawler
 
 # Configuration from environment
 SEARXNG_URL = os.getenv("SEARXNG_URL", "http://searxng:8080")
@@ -32,21 +34,13 @@ def search_web(query: str) -> str:
 
 @tool
 def fetch_page(url: str) -> str:
-    """Fetch: Extracts clean readable text from a single URL. Use this to read a specific article or documentation page found via search_web."""
+    """Fetch: Extracts clean readable text from a single URL using a headless browser. Use this to read articles or JavaScript-heavy pages."""
+    async def _fetch():
+        async with AsyncWebCrawler() as crawler:
+            result = await crawler.arun(url=url)
+            return result.markdown[:8000] # Cap at 8000 chars
     try:
-        res = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
-        soup = BeautifulSoup(res.content, 'lxml')
-        
-        # Remove script and style elements
-        for script_or_style in soup(['script', 'style', 'nav', 'footer', 'header']):
-            script_or_style.extract()
-            
-        text = soup.get_text(separator='\n')
-        # Clean up whitespace
-        lines = (line.strip() for line in text.splitlines())
-        text = '\n'.join(line for line in lines if line)
-        
-        return text[:8000] # Cap at 8000 chars to protect context window
+        return asyncio.run(_fetch())
     except Exception as e:
         return f"Error fetching page: {e}"
 

@@ -1,17 +1,17 @@
-FROM python:3.11-slim
+FROM python:3.11-slim-bookworm
 
-# Set environment variables for Python
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
 WORKDIR /app
 
-# Install dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# Install Playwright and Chromium dependencies together
+RUN python -m playwright install --with-deps chromium && \
+    rm -rf /var/lib/apt/lists/*
+
 COPY . .
 
-# Keep container running so we can exec into it for testing
 CMD ["sleep", "infinity"]
