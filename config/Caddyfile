@@ -1,7 +1,9 @@
-{
-   # email omited for http
-}
-
 http://:80 {
-    reverse_proxy litellm:4000
+    handle /agent-api/* {
+        rewrite * /v1{uri}
+        reverse_proxy agent-api:8000
+    }
+    handle {
+        reverse_proxy litellm:4000
+    }
 }

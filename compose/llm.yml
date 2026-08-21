@@ -7,6 +7,7 @@ volumes:
   postgres_data:
   ollama_data:
   qdrant_data:
+  redis_data:
 
 services:
   caddy:
@@ -108,3 +109,13 @@ services:
       - ../config/searxng:/etc/searxng:rw
     ports:
       - "127.0.0.1:8080:8080"
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: unless-stopped
+    networks: [ai-net]
+    volumes:
+      - redis_data:/data
+    ports:
+      - "127.0.0.1:6379:6379"

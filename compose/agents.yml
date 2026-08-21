@@ -1,9 +1,9 @@
 services:
-  agent:
+  agent-api:
     build:
       context: ../agents
       dockerfile: Dockerfile
-    container_name: agent
+    container_name: agent-api
     restart: unless-stopped
     networks: [ai-net]
     environment:
@@ -11,6 +11,37 @@ services:
       LITELLM_API_KEY: ${LITELLM_MASTER_KEY}
       MODEL_EXPERT: expert
       MODEL_FAST: fast
+    command: uvicorn api:app --host 0.0.0.0 --port 8000
+    ports:
+      - "127.0.0.1:8000:8000"
+
+  agent-worker:
+    build:
+      context: ../agents
+      dockerfile: Dockerfile
+    container_name: agent-worker
+    restart: unless-stopped
+    networks: [ai-net]
+    environment:
+      LITELLM_API_BASE: http://litellm:4000/v1
+      LITELLM_API_KEY: ${LITELLM_MASTER_KEY}
+      MODEL_EXPERT: expert
+      MODEL_FAST: fast
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+    command: python queue_worker.py
+
+  agent-bot:
+    build:
+      context: ../agents
+      dockerfile: Dockerfile
+    container_name: agent-bot
+    restart: unless-stopped
+    networks: [ai-net]
+    environment:
+      AGENT_API_URL: http://agent-api:8000
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      ALLOWED_USER_ID: ${TELEGRAM_CHAT_ID}
+    command: python telegram_bot.py
 
 networks:
   ai-net:
