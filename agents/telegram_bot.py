@@ -12,7 +12,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     await update.message.reply_text("Spark Agent is online. Send a message!\n\nUse `!q2` for background tasks.\nUse `/queue` to view tasks.", parse_mode="Markdown")
 
-
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ALLOWED_USER_ID:
         return
@@ -51,25 +50,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     })
     data = res.json()
     
-    if data.get("status") == "needs_approval":
-        task_id = data["task_id"]
-        suggested = data["suggested_prompt"]
-        priority = data["priority"]
-        
-        keyboard = [
-            [InlineKeyboardButton("✅ Accept", callback_data=f"accept:{task_id}"),
-             InlineKeyboardButton("✏️ Edit", callback_data=f"edit:{task_id}"),
-             InlineKeyboardButton("❌ Reject", callback_data=f"reject:{task_id}")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await update.message.reply_text(
-            f"*Suggested Prompt ({priority}):*\n\n`{suggested}`\n\nApprove this?",
-            reply_markup=reply_markup,
-            parse_mode="Markdown"
-        )
-    elif data.get("status") == "queued":
-        await update.message.reply_text(f"✅ Task queued directly ({data['priority']}). Worker is processing...")
+    # ... rest of the function
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query

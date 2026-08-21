@@ -11,3 +11,5 @@ redis==5.0.8
 fastapi==0.115.4
 uvicorn==0.32.0
 python-telegram-bot==21.4
+beautifulsoup4==4.12.3
+lxml==5.3.0

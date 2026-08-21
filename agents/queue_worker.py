@@ -3,18 +3,29 @@ import json
 import redis
 import time
 import requests
-from crag_graph import app as crag_app
+from dual_loop_graph import app as agent_app
+from langchain_core.messages import HumanMessage, AIMessage
 
 r = redis.Redis(host='redis', port=6379, db=0, decode_responses=True)
 
 def process_task(task):
     print(f"--- ⚙️ Processing Task {task['task_id']} ---")
     
-    # Run the CRAG pipeline
-    inputs = {"question": task['final_prompt'], "documents": [], "web_results": [], "retries": 0, "rewritten_query": ""}
-    final_state = crag_app.invoke(inputs, {"recursion_limit": 25})
+    from langchain_core.messages import HumanMessage, AIMessage
     
-    result = final_state.get('generation', 'Error: Could not process request.')
+    # Run the Dual-Loop graph with the correct state schema
+    inputs = {
+        "messages": [HumanMessage(content=task['final_prompt'])],
+        "rejection_count": 0
+    }
+    final_state = agent_app.invoke(inputs, {"recursion_limit": 25})
+    
+    # Extract the final draft (the last AIMessage before "FINAL_APPROVED")
+    result = "Error: Could not process request."
+    for msg in reversed(final_state["messages"]):
+        if isinstance(msg, AIMessage) and msg.content != "FINAL_APPROVED":
+            result = msg.content
+            break
     
     # Save result to Redis for API polling
     r.set(f"result:{task['task_id']}", result, ex=86400)
@@ -24,11 +35,17 @@ def process_task(task):
     if chat_id:
         bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
         if bot_token:
-            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={
+            tg_response = requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={
                 "chat_id": chat_id,
-                "text": f"✨ *Result:*\n\n{result}",
-                "parse_mode": "Markdown"
+                "text": f"✨ Result:\n\n{result}"
+                # Removed parse_mode="Markdown" to prevent silent Telegram API failures
             })
+            # Log the response from Telegram so we can see if it fails
+            if tg_response.status_code != 200:
+                print(f"❌ Telegram API Error: {tg_response.text}")
+            else:
+                print(f"✅ Sent result to Telegram chat {chat_id}")
+                
     print(f"--- ✅ Task {task['task_id']} Complete ---")
 
 def main():
