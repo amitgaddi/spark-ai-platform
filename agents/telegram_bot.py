@@ -13,47 +13,62 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Spark Agent is online. Send a message!\n\nUse `!q2` for background tasks.\nUse `/queue` to view tasks.", parse_mode="Markdown")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print(f"Received message from user ID: {update.effective_user.id}")
     if update.effective_user.id != ALLOWED_USER_ID:
+        print(f"Ignored. Expected {ALLOWED_USER_ID}")
         return
         
-    # Check if we are awaiting an edited prompt from the user
+    # If bot was waiting for an edit, but user sent a normal message, cancel the edit wait
     if context.user_data.get("awaiting_edit"):
-        task_id = context.user_data["awaiting_edit"]
-        edited_prompt = update.message.text
-        
-        res = requests.post(f"{AGENT_API_URL}/v1/approve", json={
-            "task_id": task_id,
-            "approved_prompt": edited_prompt
-        })
-        
+        print("User sent a new message instead of an edit. Clearing awaiting_edit state.")
         context.user_data["awaiting_edit"] = None
-        if res.status_code == 200:
-            await update.message.reply_text("✅ Edited prompt accepted and queued for processing!")
-        else:
-            await update.message.reply_text("❌ Error approving edited prompt. It may have expired.")
-        return
 
     user_msg = update.message.text
     chat_id = update.message.chat_id
     
-    # Check for /raw command to bypass enhancer
     bypass = False
     if user_msg.startswith("/raw "):
         bypass = True
-        user_msg = user_msg[5:] # Remove "/raw " from the message
+        user_msg = user_msg[5:]
         
-    # Call Agent API
-    res = requests.post(f"{AGENT_API_URL}/v1/chat", json={
-        "message": user_msg,
-        "chat_id": str(chat_id),
-        "bypass_enhancer": bypass
-    })
-    data = res.json()
-    
-    # ... rest of the function
+    try:
+        print("Sending request to agent-api...")
+        res = requests.post(f"{AGENT_API_URL}/v1/chat", json={
+            "message": user_msg,
+            "chat_id": str(chat_id),
+            "bypass_enhancer": bypass
+        }, timeout=240)
+        
+        print(f"API Response Status: {res.status_code}")
+        data = res.json()
+        print(f"API Data: {data}")
+        
+        if data.get("status") == "needs_approval":
+            task_id = data["task_id"]
+            suggested = data["suggested_prompt"]
+            priority = data["priority"]
+            
+            keyboard = [
+                [InlineKeyboardButton("✅ Accept", callback_data=f"accept:{task_id}"),
+                 InlineKeyboardButton("✏️ Edit", callback_data=f"edit:{task_id}"),
+                 InlineKeyboardButton("❌ Reject", callback_data=f"reject:{task_id}")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await update.message.reply_text(
+                f"Suggested Prompt ({priority}):\n\n{suggested}\n\nApprove this?",
+                reply_markup=reply_markup
+            )
+        elif data.get("status") == "queued":
+            await update.message.reply_text(f"✅ Task queued directly ({data['priority']}). Worker is processing...")
+            
+    except Exception as e:
+        print(f"Error contacting agent-api: {e}")
+        await update.message.reply_text(f"❌ Error contacting Agent API: {e}")
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
+    print(f"Received button click from user ID: {query.from_user.id}")
     await query.answer()
     
     if query.from_user.id != ALLOWED_USER_ID:
