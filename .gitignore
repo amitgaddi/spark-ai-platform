@@ -16,3 +16,4 @@ Thumbs.db
 
 # Data (Never commit actual data or models)
 /data/
+.venv/
